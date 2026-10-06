@@ -1,59 +1,48 @@
-# FARR open-source main experiment
+# FARR: Forecast-Aware Residual Refinement
 
-This repository publishes only the clean FARR main-experiment source code,
-configuration, and run instructions. It does **not** distribute data, model
-weights, endpoint predictions, labels, logs, checkpoints, or paper result
-files. All outputs are generated locally by the user and are ignored by git.
+Source code for the FARR main experiment. FARR takes matched conditioned and null forecasts from a frozen backbone, predicts an anchor-relative residual, and gates the adjustment across the forecast horizon.
 
-The public code implements the method described in the paper: matched valid
-and null endpoint evidence, 18 deterministic features, a shared residual
-refiner, horizon-wise conservative gating, Stage 1 training, and validation-
-controlled Stage 2 forecast adjustment.
+This repository contains the implementation, configurations, and run instructions. Benchmark data, frozen backbone weights, endpoint arrays, checkpoints, and paper result files are **not distributed** here.
 
-## Release layout
+## Repository contents
 
-```text
-src/       model, features, data loading, endpoint adapter, training, metrics
-configs/   default settings and four dataset configurations
-scripts/   data validation, endpoint generation, training, evaluation, batching
-docs/      data, model, and reproduction instructions
-```
+| Path | What it contains |
+| --- | --- |
+| [`src/farr/`](src/farr/) | Model, features, data loading, training, and metrics |
+| [`configs/`](configs/) | Default and dataset-specific experiment settings |
+| [`scripts/`](scripts/) | Endpoint preparation, training, evaluation, and batch runs |
+| [`docs/`](docs/) | Data format, backbone adapter, and reproduction protocol |
 
-The root contains only `README.md`, `requirements.txt`, `.gitignore`,
-`LICENSE`, and `THIRD_PARTY_NOTICES.md`.
+## Install
 
-## Installation
-
-Use a clean Python 3.10+ environment with a PyTorch installation suitable for
-the target hardware:
+Use Python 3.10 or newer and a PyTorch installation suitable for your CPU or GPU:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-## Local endpoint data
+## Prepare endpoint data
 
-FARR consumes a local endpoint bundle produced by the user's frozen backbone:
+FARR expects a local bundle produced by your frozen forecasting backbone:
 
 ```text
 <bundle>/
-  train/  history.npy  y_valid.npy  y_null.npy  y_true.npy
-  val/    history.npy  y_valid.npy  y_null.npy  y_true.npy
-  test/   history.npy  y_valid.npy  y_null.npy  y_true.npy
-  scaler.npz                         # optional for raw-space metrics
+  train/
+    history.npy  y_valid.npy  y_null.npy  y_true.npy
+  val/
+    history.npy  y_valid.npy  y_null.npy  y_true.npy
+  test/
+    history.npy  y_valid.npy  y_null.npy  y_true.npy
+  scaler.npz  # optional; needed for raw-space metrics
 ```
 
-`history` is `[N, L, C]`, and endpoint/target arrays are `[N, H, C]`.
-Single-channel `[N, L]` and `[N, H]` arrays are also accepted. Valid and null
-forecasts must use the same samples, history, preprocessing, channel order,
-checkpoint, and deterministic inference settings.
+`history` has shape `[N, L, C]`; forecasts and targets have shape `[N, H, C]`. Single-channel `[N, L]` and `[N, H]` arrays are also accepted. Valid and null forecasts must use the same samples, preprocessing, channel order, backbone checkpoint, and deterministic inference settings.
 
-The endpoint generator is deliberately not tied to a private SE-LLM path. Use
-`scripts/generate_endpoints.py` with a local adapter implementing
-`predict(history, condition)` for `condition="valid"` and `condition="null"`.
-See `docs/models.md` and `docs/data.md` before preparing real data.
+To connect a backbone, implement `predict(history, condition)` for `condition="valid"` and `condition="null"`, then use [`scripts/generate_endpoints.py`](scripts/generate_endpoints.py). See the [data guide](docs/data.md) and [model guide](docs/models.md) before preparing real data.
 
-## Run one main experiment
+## Run an experiment
+
+From the repository root, validate your local bundle and run one dataset/horizon:
 
 ```bash
 python scripts/prepare_data.py --data-root /path/to/endpoint_bundle
@@ -63,15 +52,9 @@ python scripts/run_main.py \
   --output-dir /path/to/local_outputs/ETTh1-H192
 ```
 
-The program fits FARR on `train/`, selects Stage 1/Stage 2 using `val/`, and
-evaluates `test/` only after the configuration is fixed. Runtime files are
-written under the output directory supplied by the user; none are stored in
-this release.
+The run trains on `train/`, selects Stage 1 or Stage 2 using `val/`, and evaluates `test/` after selection. Outputs are written to the directory you specify.
 
-## Run all four datasets and horizons
-
-Arrange local bundles as `DATA_ROOT/ETTh1/H96`, `DATA_ROOT/Weather/H192`,
-`DATA_ROOT/Traffic/H336`, and so on, then run:
+For all four datasets and horizons, arrange bundles as `DATA_ROOT/ETTh1/H96`, `DATA_ROOT/Weather/H192`, and so on:
 
 ```bash
 python scripts/run_suite.py \
@@ -80,14 +63,7 @@ python scripts/run_suite.py \
   --output-dir /path/to/local_outputs/suite-main
 ```
 
-The shell wrappers are equivalent:
-
-```bash
-DATA_ROOT=/path/to/DATA_ROOT OUTPUT_DIR=/path/to/local_outputs/suite-main \
-  bash scripts/run_main.sh
-```
-
-## Evaluate an existing local checkpoint
+To evaluate an existing checkpoint:
 
 ```bash
 python scripts/evaluate.py \
@@ -97,17 +73,10 @@ python scripts/evaluate.py \
   --phase stage2
 ```
 
-Use `--metric-space raw` only when the bundle includes a training-fitted
-`scaler.npz`. The default is standardized-space MSE/MAE.
+Metrics default to standardized-space MSE and MAE. Use `--metric-space raw` only if your bundle includes a training-fitted `scaler.npz`.
 
-## What is intentionally not promised
+## Reproducibility and scope
 
-The repository contains the complete FARR refinement implementation, but it
-does not include a frozen SE-LLM checkpoint or a dataset. Reproducing the
-paper's exact numerical table therefore requires the user to obtain the
-permitted data and backbone, then generate matched endpoints with the adapter.
-This release makes that boundary explicit rather than embedding private
-weights or prediction caches.
+See the [reproduction protocol](docs/reproduction.md) for the full workflow. Exact paper numbers require the permitted datasets, frozen backbone, and matched endpoints; these are not included in the repository.
 
-See `docs/reproduction.md` for the end-to-end protocol and
-`docs/open_source_checklist.md` before publishing a website link.
+License: [MIT](LICENSE). Third-party information: [notices](THIRD_PARTY_NOTICES.md).

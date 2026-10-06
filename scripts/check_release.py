@@ -25,8 +25,8 @@ def main() -> None:
         "src/farr", "scripts/run_main.py", "scripts/generate_endpoints.py",
         "docs/data.md", "docs/models.md", "docs/reproduction.md",
     ]
-    allowed_root = {"src", "configs", "scripts", "docs", "README.md", "requirements.txt",
-                    ".gitignore", "LICENSE", "THIRD_PARTY_NOTICES.md"}
+    allowed_root = {".git", "src", "configs", "scripts", "docs", "README.md",
+                    "requirements.txt", ".gitignore", "LICENSE", "THIRD_PARTY_NOTICES.md"}
     for child in ROOT.iterdir():
         if child.name not in allowed_root:
             errors.append(f"unexpected root entry: {child.name}")
