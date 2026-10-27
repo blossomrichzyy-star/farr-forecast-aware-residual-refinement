@@ -1,82 +1,77 @@
 # FARR: Forecast-Aware Residual Refinement
 
-Source code for the FARR main experiment. FARR takes matched conditioned and null forecasts from a frozen backbone, predicts an anchor-relative residual, and gates the adjustment across the forecast horizon.
+FARR refines a frozen forecaster using matched valid and null endpoints,
+18 deterministic features, residual refinement, horizon-wise gating, and
+forecast adjustment. Main experiments cover ETTh1, Weather, Traffic, and
+ECL with prediction horizons 96, 192, 336, and 720.
 
-This repository contains the implementation, configurations, and run instructions. Benchmark data, frozen backbone weights, endpoint arrays, checkpoints, and paper result files are **not distributed** here.
+Training uses strict joint validation selection and valid-endpoint fallback.
+The method parameters are defined in `src/farr/protocol.py`.
 
-## Repository contents
+## Repository structure
 
-| Path | What it contains |
-| --- | --- |
-| [`src/farr/`](src/farr/) | Model, features, data loading, training, and metrics |
-| [`configs/`](configs/) | Default and dataset-specific experiment settings |
-| [`scripts/`](scripts/) | Endpoint preparation, training, evaluation, and batch runs |
-| [`docs/`](docs/) | Data format, backbone adapter, and reproduction protocol |
+- `src/farr/`: model, features, data loading, training, and evaluation.
+- `scripts/`: endpoint generation, main experiments, and verification.
+- `docs/`: data preparation, backbone integration, and training protocol.
 
-## Install
+Data, weights, configurations, and experiment outputs are not distributed.
 
-Use Python 3.10 or newer and a PyTorch installation suitable for your CPU or GPU:
+## Install and verify
+
+CPU verification uses Python 3.14 and the versions in `requirements.txt`.
+Use a PyTorch build appropriate for the execution hardware when running
+the frozen forecaster on a GPU.
 
 ```bash
 python -m pip install -r requirements.txt
+python -B scripts/verify_implementation.py
+python -B scripts/verify_release.py
 ```
 
-## Prepare endpoint data
+## Run with prepared endpoints
 
-FARR expects a local bundle produced by your frozen forecasting backbone:
-
-```text
-<bundle>/
-  train/
-    history.npy  y_valid.npy  y_null.npy  y_true.npy
-  val/
-    history.npy  y_valid.npy  y_null.npy  y_true.npy
-  test/
-    history.npy  y_valid.npy  y_null.npy  y_true.npy
-  scaler.npz  # optional; needed for raw-space metrics
-```
-
-`history` has shape `[N, L, C]`; forecasts and targets have shape `[N, H, C]`. Single-channel `[N, L]` and `[N, H]` arrays are also accepted. Valid and null forecasts must use the same samples, preprocessing, channel order, backbone checkpoint, and deterministic inference settings.
-
-To connect a backbone, implement `predict(history, condition)` for `condition="valid"` and `condition="null"`, then use [`scripts/generate_endpoints.py`](scripts/generate_endpoints.py). See the [data guide](docs/data.md) and [model guide](docs/models.md) before preparing real data.
-
-## Run an experiment
-
-From the repository root, validate your local bundle and run one dataset/horizon:
+The local bundle needs `train/`, `val/`, and `test/` directories. Each contains
+`history.npy`, `y_valid.npy`, `y_null.npy`, and `y_true.npy`, all in the same
+training-standardized space and sample order. History shape is `[N,672,C]`;
+forecast and target shapes are `[N,H,C]`. The loader expands channels into
+single-channel complete windows so batch size has the paper's meaning.
 
 ```bash
-python scripts/prepare_data.py --data-root /path/to/endpoint_bundle
-python scripts/run_main.py \
-  --config configs/etth1.yaml \
-  --data-root /path/to/endpoint_bundle \
-  --output-dir /path/to/local_outputs/ETTh1-H192
+python -B scripts/run_main.py --dataset ETTh1 --horizon 192 \
+  --data-root /path/to/endpoints/ETTh1/H192 \
+  --output-dir /path/to/local_outputs/ETTh1/H192
 ```
 
-The run trains on `train/`, selects Stage 1 or Stage 2 using `val/`, and evaluates `test/` after selection. Outputs are written to the directory you specify.
-
-For all four datasets and horizons, arrange bundles as `DATA_ROOT/ETTh1/H96`, `DATA_ROOT/Weather/H192`, and so on:
+Model selection uses train and validation inputs only. Test files are opened
+after selection is frozen. Standardized MSE/MAE and the selected stage are
+generated in the output directory. Weights are saved only with
+`--save-checkpoint`. Evaluation restores the selected stage automatically:
 
 ```bash
-python scripts/run_suite.py \
-  --config configs/suite.yaml \
-  --data-root /path/to/DATA_ROOT \
-  --output-dir /path/to/local_outputs/suite-main
+python -B scripts/evaluate.py --checkpoint /path/to/local_outputs/farr.pt \
+  --data-root /path/to/endpoints/ETTh1/H192
 ```
 
-To evaluate an existing checkpoint:
+## Run all main settings
+
+Arrange local bundles as `DATA_ROOT/ETTh1/H96`, `DATA_ROOT/Weather/H192`,
+etc. Then run:
 
 ```bash
-python scripts/evaluate.py \
-  --config configs/etth1.yaml \
-  --data-root /path/to/endpoint_bundle \
-  --checkpoint /path/to/local_outputs/farr.pt \
-  --phase stage2
+python -B scripts/run_all.py --data-root /path/to/DATA_ROOT \
+  --output-dir /path/to/local_outputs
+python -B scripts/summarize.py --input /path/to/local_outputs/suite.json
 ```
 
-Metrics default to standardized-space MSE and MAE. Use `--metric-space raw` only if your bundle includes a training-fitted `scaler.npz`.
+## Generate matched endpoints
 
-## Reproducibility and scope
+Raw CSV preparation includes chronological splits and training-fitted
+standardization. Load a trained, frozen SE-LLM forecaster through a local
+factory. See `docs/backbone.md` for the model interface and null condition.
 
-See the [reproduction protocol](docs/reproduction.md) for the full workflow. Exact paper numbers require the permitted datasets, frozen backbone, and matched endpoints; these are not included in the repository.
-
-License: [MIT](LICENSE). Third-party information: [notices](THIRD_PARTY_NOTICES.md).
+```bash
+python -B scripts/generate_endpoints.py --dataset ETTh1 --horizon 192 \
+  --csv /path/to/ETTh1.csv --factory my_loader:load_model \
+  --backbone-checkpoint /path/to/frozen_predictor.pt \
+  --output-dir /path/to/endpoints/ETTh1/H192
+```

@@ -63,9 +63,9 @@ class FARRModel(nn.Module):
 
     def forward(self, features: torch.Tensor, y_valid: torch.Tensor,
                 y_null: torch.Tensor, use_adjustment: bool = True):
-        batch, horizon, channels, width = features.shape
-        residual = self.refiner(features.reshape(batch * horizon * channels, width))
-        residual = residual.reshape(batch, horizon, channels)
+        if features.ndim != 3 or features.shape[-1] != 18:
+            raise ValueError("features must be [B,H,18] single-channel windows")
+        residual = self.refiner(features).unsqueeze(-1)
         correction = self.gate(residual)
         effective = self.effective_valid(y_valid, y_null) if use_adjustment else y_valid
         return effective + correction, residual, effective

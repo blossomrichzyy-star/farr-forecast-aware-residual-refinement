@@ -1,3 +1,0 @@
-base: default.yaml
-dataset: Weather
-data_root: data/Weather

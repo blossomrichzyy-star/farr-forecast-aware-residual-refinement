@@ -1,22 +1,24 @@
-from __future__ import annotations
-
+from collections import defaultdict
+from pathlib import Path
 import argparse
 import json
-from pathlib import Path
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Summarize results produced locally by a FARR run.")
-    parser.add_argument("--input", required=True, help="main.json or suite_main.json generated locally")
+def main():
+    parser = argparse.ArgumentParser(description="Compute equal-horizon dataset means from user-generated outputs.")
+    parser.add_argument("--input", required=True, help="A suite.json produced locally")
     args = parser.parse_args()
-    payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-    rows = payload if isinstance(payload, list) else [payload]
-    metrics = [row.get("test", {}) for row in rows if row.get("test")]
-    if not metrics:
-        raise ValueError("No test metrics found in the supplied runtime output")
-    summary = {key: sum(float(item[key]) for item in metrics) / len(metrics)
-               for key in ("mse", "mae")}
-    print(json.dumps({"count": len(metrics), "mean_test": summary}, indent=2))
+    records = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    groups = defaultdict(list)
+    for row in records:
+        groups[row["dataset"]].append(row)
+    result = {}
+    for dataset, rows in groups.items():
+        if sorted(row["horizon"] for row in rows) != [96, 192, 336, 720]:
+            raise ValueError("each dataset requires exactly four distinct horizons")
+        result[dataset] = {key: sum(row["test"][key] for row in rows)/4
+                           for key in ("mse", "mae")}
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

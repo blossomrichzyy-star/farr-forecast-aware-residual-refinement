@@ -1,32 +1,17 @@
-# Data and endpoint format
+# Data preparation
 
-The public repository does not contain any dataset or forecast cache. Obtain
-each benchmark from its official source and follow its license.
+The raw CSV has a timestamp first column and numerical channel columns in
+their original order. `prepare_raw_splits` fits scikit-learn StandardScaler on
+the training region only. ETTh1 uses fixed 12/4/4 blocks of 30*24 observations.
+The other datasets use chronological 70% train, the remaining middle 10%
+validation, and final 20% test. Validation and test history may use preceding
+observations, but future targets stay in the assigned split. Missing and
+non-finite values are rejected.
 
-## Bundle layout
+Each sample is a complete single-channel input of length 672 with the next H
+values as target. Endpoint generation preserves channel-major order and uses
+identical histories for the valid/null passes.
 
-Each fixed dataset/horizon bundle has `train/`, `val/`, and `test/` folders.
-Each folder contains:
-
-- `history.npy`: `[N, L, C]` historical context;
-- `y_valid.npy`: `[N, H, C]` forecast under the standard condition;
-- `y_null.npy`: `[N, H, C]` forecast under the fixed null condition;
-- `y_true.npy`: `[N, H, C]` future target.
-
-`scaler.npz` is optional and must contain `mean` and `scale` fitted on the
-training split only. It is required only for raw-space reporting.
-
-The four data configurations use input length 672 and support horizons 96,
-192, 336, and 720. The loader also accepts single-channel arrays without the
-final channel dimension and legacy names ending in `_normalized.npy`.
-
-## Required endpoint invariants
-
-The valid and null passes must share the checkpoint, historical input,
-preprocessing, sample order, channel order, label length, token length, and
-deterministic seed. Only the designated conditioning operation changes. The
-null operation must be documented by the backbone adapter; it must not be
-silently substituted by a second unrelated forecast.
-
-Run `scripts/prepare_data.py --data-root ...` before training to validate
-shapes and split availability without calculating or storing paper scores.
+Already-generated endpoint bundles must use the same training-fitted scale
+for histories, endpoints, and targets. Legacy endpoint names ending in
+`_normalized.npy` are accepted. Model selection never opens test files.

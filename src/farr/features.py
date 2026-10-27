@@ -11,11 +11,15 @@ def build_features(history: torch.Tensor, y_null: torch.Tensor, y_valid: torch.T
                    stat_length: int = 168) -> tuple[torch.Tensor, torch.Tensor]:
     """Build the paper's 18 deterministic per-step features.
 
-    The returned tensor has shape [B, H, C, 18]. The second return value is
+    The returned tensor has shape [B, H, 18] for single-channel windows.
+    Multichannel series are split by the data loader before this function.
+    The second return value is
     the raw endpoint disagreement, useful for residual diagnostics.
     """
     if history.ndim != 3 or y_null.ndim != 3 or y_valid.ndim != 3:
         raise ValueError("history and endpoint tensors must be [B, T, C]")
+    if history.shape[2] != 1 or y_valid.shape[2] != 1 or y_null.shape[2] != 1:
+        raise ValueError("features require complete single-channel windows")
     b, _, c = history.shape
     h = y_valid.shape[1]
     if y_null.shape != y_valid.shape:
@@ -35,18 +39,17 @@ def build_features(history: torch.Tensor, y_null: torch.Tensor, y_valid: torch.T
         half = max(window.shape[1] // 2, 1)
         recent = window[:, -half:]
         previous = window[:, -2 * half:-half]
-    # Compare the two windows channel-wise, preserving the 24-point motif
-    # rather than collapsing each window to one mean value.
-    cosine = torch.nn.functional.cosine_similarity(
-        recent.transpose(1, 2), previous.transpose(1, 2), dim=-1
-    ).view(b, 1, c)
+    # Stabilized cosine similarity between consecutive 24-point motifs.
+    cosine = ((recent * previous).sum(dim=1, keepdim=True)
+              / (recent.norm(dim=1, keepdim=True)
+                 * previous.norm(dim=1, keepdim=True) + 1e-5))
     ambiguity = (volatility / scale + 1.0 - cosine).clamp(0.0, 10.0)
     delta = y_valid - y_null
     d1 = torch.cat([torch.zeros_like(delta[:, :1]), delta[:, 1:] - delta[:, :-1]], dim=1)
     delta_scale = delta / scale
     smoothness = (d1.abs() / (delta.abs() + 1e-3)).clamp(0.0, 10.0)
     relative = delta.abs() / (y_null.abs() + 1e-3)
-    sign_consistency = torch.sign(delta).mean(dim=1, keepdim=True).expand(-1, h, -1)
+    sign_consistency = torch.sign(delta).mean(dim=1, keepdim=True).abs().expand(-1, h, -1)
     horizon = torch.linspace(0.0, 1.0, h, device=history.device, dtype=history.dtype).view(1, h, 1).expand(b, -1, c)
 
     repeat = lambda value: value.expand(-1, h, -1)
@@ -55,7 +58,7 @@ def build_features(history: torch.Tensor, y_null: torch.Tensor, y_valid: torch.T
         repeat(volatility), repeat(cosine), repeat(ambiguity), y_null, y_valid,
         delta, delta.abs(), delta_scale, d1, smoothness, relative, sign_consistency, horizon,
     ], dim=-1)
-    return features, delta
+    return features.squeeze(2), delta
 
 
 FEATURE_NAMES = [

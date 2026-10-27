@@ -1,3 +1,0 @@
-base: default.yaml
-dataset: ECL
-data_root: data/ECL

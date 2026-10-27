@@ -1,37 +1,25 @@
-from __future__ import annotations
+"""Streaming standardized-space MSE and MAE; no stored benchmark values."""
 
-from typing import Any
-
-import numpy as np
 import torch
 
-from .data_loader import Scaler
 
+class ErrorAccumulator:
+    def __init__(self):
+        self.square_sum = self.absolute_sum = 0.0
+        self.count = 0
 
-def metric_dict(pred: np.ndarray, target: np.ndarray, metric_space: str = "standardized",
-                scaler: Scaler | None = None) -> dict[str, float]:
-    if metric_space == "raw":
-        if scaler is None:
-            raise ValueError("raw metrics require data_root/scaler.npz")
-        pred = scaler.inverse(pred)
-        target = scaler.inverse(target)
-    error = np.asarray(pred, dtype=np.float64) - np.asarray(target, dtype=np.float64)
-    return {"mse": float(np.mean(error ** 2)), "mae": float(np.mean(np.abs(error)))}
+    def update(self, prediction, target):
+        if prediction.shape != target.shape:
+            raise ValueError("prediction and target shapes differ")
+        error = prediction.detach().to(device="cpu", dtype=torch.float64)
+        error = error - target.detach().to(device="cpu", dtype=torch.float64)
+        if not torch.isfinite(error).all():
+            raise ValueError("prediction or target contains non-finite values")
+        self.square_sum += error.square().sum().item()
+        self.absolute_sum += error.abs().sum().item()
+        self.count += error.numel()
 
-
-def merge_metric_sums(parts: list[tuple[dict[str, float], int]]) -> dict[str, float]:
-    total = sum(count for _, count in parts)
-    if total == 0:
-        raise ValueError("cannot aggregate empty metrics")
-    return {
-        key: float(sum(values[key] * count for values, count in parts) / total)
-        for key in ("mse", "mae")
-    }
-
-
-def to_jsonable(value: Any) -> Any:
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, torch.Tensor):
-        return value.detach().cpu().tolist()
-    return value
+    def result(self):
+        if not self.count:
+            raise ValueError("cannot evaluate an empty split")
+        return {"mse": self.square_sum/self.count, "mae": self.absolute_sum/self.count}

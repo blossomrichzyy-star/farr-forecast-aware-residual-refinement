@@ -1,3 +1,0 @@
-base: default.yaml
-dataset: Traffic
-data_root: data/Traffic
