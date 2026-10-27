@@ -43,7 +43,7 @@ def forward(model, batch, protocol, stage):
     effective = (model.effective_valid(batch["y_valid"], batch["y_null"])
                  if stage == "stage2" else batch["y_valid"])
     features, _ = build_features(batch["history"], batch["y_null"], effective,
-                                 protocol.history_stat_length)
+                                 protocol.history_stat_length, protocol.recurrence_window)
     # Rebuild all endpoint-derived features from the Stage-2 effective anchor.
     return model(features, batch["y_valid"], batch["y_null"],
                  use_adjustment=stage == "stage2")
@@ -52,8 +52,10 @@ def forward(model, batch, protocol, stage):
 def loss_terms(prediction, residual, effective, target, protocol):
     # effective is intentionally not detached: Stage-2 residual supervision
     # must also differentiate through the adjusted-anchor target.
-    forecast = nn.functional.smooth_l1_loss(prediction, target, beta=1.0)
-    fit = nn.functional.smooth_l1_loss(residual, target-effective, beta=1.0)
+    forecast = nn.functional.smooth_l1_loss(prediction, target,
+                                           beta=protocol.smooth_l1_transition)
+    fit = nn.functional.smooth_l1_loss(residual, target-effective,
+                                      beta=protocol.smooth_l1_transition)
     smooth = (residual[:, 1:]-residual[:, :-1]).square().mean()
     norm = residual.square().mean()
     return forecast + protocol.residual_weight*fit + protocol.smoothness_weight*smooth + protocol.residual_l2_weight*norm

@@ -33,19 +33,23 @@ def alignment_condition(model, condition):
             handle.remove()
 
 
-def load_backbone(factory_name, checkpoint_path, dataset, horizon, device):
+def load_backbone(factory_name, checkpoint_path, dataset, protocol, device):
     """A local factory loads the upstream SE-LLM architecture and user's weights.
 
-    The factory signature is (checkpoint_path, dataset, horizon, device).
-    No credential, private location, checkpoint, or architecture config is
-    bundled. It returns a torch module with the upstream SE-LLM call signature.
+    The factory receives model and length settings from the main protocol
+    and returns a torch module with the SE-LLM call signature.
     """
+    protocol.validate()
     module_name, separator, function_name = factory_name.partition(":")
     if not separator:
         raise ValueError("factory must use the module:function form")
     factory = getattr(import_module(module_name), function_name)
     model = factory(checkpoint_path=checkpoint_path, dataset=dataset,
-                    horizon=horizon, device=device)
+                    horizon=protocol.horizon, device=device,
+                    backbone_name=protocol.backbone_name,
+                    input_length=protocol.input_length,
+                    label_length=protocol.label_length,
+                    token_length=protocol.token_length)
     if not isinstance(model, torch.nn.Module):
         raise TypeError("factory must return a torch.nn.Module")
     model.to(device).eval()
@@ -53,7 +57,7 @@ def load_backbone(factory_name, checkpoint_path, dataset, horizon, device):
     return model
 
 
-def rollout(model, history, horizon, token_length=96):
+def rollout(model, history, horizon, token_length):
     """Same recursive 96-point rollout for both endpoint conditions.
 
     This adapter targets the archived Qwen-based SE-LLM, whose temporal mark

@@ -8,7 +8,7 @@ def _safe_std(x: torch.Tensor, dim: int, keepdim: bool = True) -> torch.Tensor:
 
 
 def build_features(history: torch.Tensor, y_null: torch.Tensor, y_valid: torch.Tensor,
-                   stat_length: int = 168) -> tuple[torch.Tensor, torch.Tensor]:
+                   stat_length: int, recurrence_window: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Build the paper's 18 deterministic per-step features.
 
     The returned tensor has shape [B, H, 18] for single-channel windows.
@@ -24,7 +24,9 @@ def build_features(history: torch.Tensor, y_null: torch.Tensor, y_valid: torch.T
     h = y_valid.shape[1]
     if y_null.shape != y_valid.shape:
         raise ValueError("valid and null endpoint shapes must match")
-    window = history[:, -min(stat_length, history.shape[1]):]
+    if not 0 < 2*recurrence_window <= stat_length <= history.shape[1]:
+        raise ValueError("history must contain the requested statistics and recurrence windows")
+    window = history[:, -stat_length:]
     latest = window[:, -1:]
     mean = window.mean(dim=1, keepdim=True)
     scale = _safe_std(window, dim=1)
@@ -32,14 +34,9 @@ def build_features(history: torch.Tensor, y_null: torch.Tensor, y_valid: torch.T
     diff = window[:, 1:] - window[:, :-1]
     diff_scale = _safe_std(diff, dim=1)
     volatility = diff.abs().mean(dim=1, keepdim=True)
-    if window.shape[1] >= 48:
-        recent = window[:, -24:]
-        previous = window[:, -48:-24]
-    else:
-        half = max(window.shape[1] // 2, 1)
-        recent = window[:, -half:]
-        previous = window[:, -2 * half:-half]
-    # Stabilized cosine similarity between consecutive 24-point motifs.
+    recent = window[:, -recurrence_window:]
+    previous = window[:, -2*recurrence_window:-recurrence_window]
+    # Stabilized cosine similarity between consecutive recurrence windows.
     cosine = ((recent * previous).sum(dim=1, keepdim=True)
               / (recent.norm(dim=1, keepdim=True)
                  * previous.norm(dim=1, keepdim=True) + 1e-5))

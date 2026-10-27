@@ -5,9 +5,13 @@ its matching architecture. A base Qwen language model must first be adapted
 and trained for the forecasting task.
 
 A local function named by `--factory module:function` receives keyword
-arguments `checkpoint_path`, `dataset`, `horizon`, and `device`, and returns
-the fully loaded torch model. Load the checkpoint strictly with the matching
-architecture in the upstream SE-LLM environment.
+arguments `checkpoint_path`, `dataset`, `horizon`, `device`, `backbone_name`,
+`input_length`, `label_length`, and `token_length`, and returns the fully
+loaded torch model. Model settings are passed directly from `PaperProtocol`:
+Qwen2.5-0.5B-Instruct, input length 672, label length 576, and token length 96.
+Load the checkpoint strictly with the matching architecture in the upstream
+SE-LLM environment. Endpoint generation uses the protocol evaluation batch
+size of 8192 complete single-channel windows.
 
 The adapter uses the Qwen-based SE-LLM interface:
 

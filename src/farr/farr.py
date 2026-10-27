@@ -7,7 +7,7 @@ from torch import nn
 class ResidualRefiner(nn.Module):
     """Shared 18 -> 128 -> 128 -> 1 residual refiner."""
 
-    def __init__(self, hidden_width: int = 128):
+    def __init__(self, hidden_width: int):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(18, hidden_width), nn.GELU(),
@@ -33,7 +33,7 @@ class HorizonGate(nn.Module):
 
 
 class ForecastAdjustment(nn.Module):
-    def __init__(self, horizon: int, scale: float = 0.10, offset: float = 0.10):
+    def __init__(self, horizon: int, scale: float, offset: float):
         super().__init__()
         self.scale = float(scale)
         self.offset = float(offset)
@@ -71,12 +71,13 @@ class FARRModel(nn.Module):
         return effective + correction, residual, effective
 
 
-def make_model(config) -> FARRModel:
+def make_model(protocol) -> FARRModel:
+    protocol.validate()
     return FARRModel(
-        horizon=config.horizon,
-        hidden_width=config.hidden_width,
-        lambda_max=config.lambda_max,
-        initial_gate_logit=config.initial_gate_logit,
-        adjustment_scale=config.adjustment_scale,
-        adjustment_offset=config.adjustment_offset,
+        horizon=protocol.horizon,
+        hidden_width=protocol.hidden_width,
+        lambda_max=protocol.lambda_max,
+        initial_gate_logit=protocol.initial_gate_logit,
+        adjustment_scale=protocol.adjustment_scale,
+        adjustment_offset=protocol.adjustment_offset,
     )

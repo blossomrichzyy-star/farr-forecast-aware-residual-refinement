@@ -12,7 +12,7 @@ from farr.protocol import DATASETS, HORIZONS, PaperProtocol
 from farr.train import loader, resolve_device
 
 
-def export_split(model, dataset, destination, protocol, device, batch_size):
+def export_split(model, dataset, destination, protocol, device):
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
     count = len(dataset)
@@ -22,14 +22,14 @@ def export_split(model, dataset, destination, protocol, device, batch_size):
         arrays[name] = np.lib.format.open_memmap(destination/f"{name}.npy", mode="w+",
                                                 dtype=np.float32, shape=(count, length, 1))
     offset = 0
-    for batch in loader(dataset, batch_size):
+    for batch in loader(dataset, protocol.eval_batch_size):
         size = batch["history"].shape[0]
         for name in ("history", "y_true"):
             arrays[name][offset:offset+size] = batch[name].numpy()
         offset += size
     for condition in ("valid", "null"):
         offset = 0
-        batches = loader(dataset, batch_size)
+        batches = loader(dataset, protocol.eval_batch_size)
         for prediction in endpoint_pass(model, batches, condition, protocol, device):
             if prediction.shape[1:] != (protocol.horizon, 1) or not torch.isfinite(prediction).all():
                 raise ValueError("invalid endpoint output shape or non-finite prediction")
@@ -52,18 +52,16 @@ def main():
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--split", choices=("train", "val", "test", "all"), default="all")
     parser.add_argument("--device", default="auto")
-    parser.add_argument("--endpoint-batch-size", type=int, default=128)
     args = parser.parse_args()
-    if args.endpoint_batch_size <= 0:
-        raise ValueError("endpoint batch size must be positive")
     protocol = PaperProtocol(horizon=args.horizon)
+    protocol.validate()
     device = resolve_device(args.device)
     model = load_backbone(args.factory, args.backbone_checkpoint, args.dataset,
-                          args.horizon, device)
+                          protocol, device)
     splits = prepare_raw_splits(args.csv, args.dataset, protocol)
     for split in (("train", "val", "test") if args.split == "all" else (args.split,)):
         export_split(model, splits[split], Path(args.output_dir)/split,
-                      protocol, device, args.endpoint_batch_size)
+                      protocol, device)
         print(f"Completed {split} endpoint generation.")
 
 

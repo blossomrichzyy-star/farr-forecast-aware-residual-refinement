@@ -1,6 +1,8 @@
 # Method and training protocol
 
 The parameters in `src/farr/protocol.py` correspond to Table 3.
+All main-experiment entry points use this protocol without separate
+per-dataset training overrides.
 
 | Paper item | Implementation |
 | --- | --- |
@@ -16,6 +18,10 @@ The parameters in `src/farr/protocol.py` correspond to Table 3.
 | Stage transition | Stage 2 runs only after Stage 1 improves both metrics over valid; Stage 2 must also pass that anchor comparison |
 | Fallback | Retain eligible Stage 1 when Stage 2 fails; otherwise use original valid when Stage 1 is ineligible |
 | Training budget | Stage 1/2 maximum epochs 10/5, patience 2/2, AdamW learning rates 1e-3/1e-4 |
+| Batch size | 8192 complete single-channel windows for training, evaluation, and endpoint generation |
+| Optimizer | AdamW weight decay 1e-4; global gradient clipping 1.0 |
+| Frozen forecaster | Qwen2.5-0.5B-Instruct; input/label/token lengths 672/576/96 |
+| Random seed | 2021 for training and each complete endpoint pass |
 | Metrics | Standardized MSE/MAE; equal-horizon dataset means |
 
 Stage-2 features and the residual target are recomputed from the adjusted

@@ -7,6 +7,9 @@ ECL with prediction horizons 96, 192, 336, and 720.
 
 Training uses strict joint validation selection and valid-endpoint fallback.
 The method parameters are defined in `src/farr/protocol.py`.
+Training, evaluation, feature construction, and endpoint generation all use
+this shared protocol. Command-line options select the dataset, horizon,
+device, and local input/output paths.
 
 ## Repository structure
 
