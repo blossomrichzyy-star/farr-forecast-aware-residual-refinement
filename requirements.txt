@@ -1,4 +1,4 @@
-# Versions used for the CPU verification of this source package.
+# Core dependencies.
 numpy==2.4.4
 torch==2.11.0
 pandas==3.0.2

@@ -11,21 +11,19 @@ The method parameters are defined in `src/farr/protocol.py`.
 ## Repository structure
 
 - `src/farr/`: model, features, data loading, training, and evaluation.
-- `scripts/`: endpoint generation, main experiments, and verification.
+- `scripts/`: endpoint generation, main experiments, and evaluation.
 - `docs/`: data preparation, backbone integration, and training protocol.
 
 Data, weights, configurations, and experiment outputs are not distributed.
 
-## Install and verify
+## Installation
 
-CPU verification uses Python 3.14 and the versions in `requirements.txt`.
-Use a PyTorch build appropriate for the execution hardware when running
-the frozen forecaster on a GPU.
+Install the dependencies in `requirements.txt`. Use a PyTorch build
+appropriate for the execution hardware when running the frozen forecaster
+on a GPU.
 
 ```bash
 python -m pip install -r requirements.txt
-python -B scripts/verify_implementation.py
-python -B scripts/verify_release.py
 ```
 
 ## Run with prepared endpoints

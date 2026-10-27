@@ -12,7 +12,7 @@ The parameters in `src/farr/protocol.py` correspond to Table 3.
 | Eq. (6), adjustment | Two zero-initialized horizon vectors, bounded scale and offset of 0.10 |
 | Eqs. (7)-(8), gate and final forecast | 0.20 sigmoid(logit), initial logit -6; residual added to the effective valid anchor |
 | Eqs. (9)-(10), objective | SmoothL1 with transition 1; residual weight 0.10; pre-gate smoothness and L2 weights 0.01 |
-| Checkpoint updates | Both validation MSE and MAE must strictly decrease |
+| Checkpoint updates | Both validation MSE and MAE must strictly decrease; Stage-2 candidates must first improve both over the valid anchor |
 | Stage transition | Stage 2 runs only after Stage 1 improves both metrics over valid; Stage 2 must also pass that anchor comparison |
 | Fallback | Retain eligible Stage 1 when Stage 2 fails; otherwise use original valid when Stage 1 is ineligible |
 | Training budget | Stage 1/2 maximum epochs 10/5, patience 2/2, AdamW learning rates 1e-3/1e-4 |
@@ -25,7 +25,3 @@ anchor, not with Stage 1.
 
 The feature tensor is exactly `[B,H,18]`. Data loading expands each channel
 into an individual complete window; the shared refiner returns `[B,H,1]`.
-
-`scripts/verify_implementation.py` tests feature formulas, selection rules,
-gradient flow, data alignment, endpoint pairing, and checkpoint restoration
-using synthetic inputs.

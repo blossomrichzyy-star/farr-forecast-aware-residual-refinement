@@ -70,7 +70,8 @@ def evaluate(model, dataset, protocol, stage, device):
     return accumulator.result()
 
 
-def _train_phase(model, train_set, val_set, protocol, device, stage):
+def _train_phase(model, train_set, val_set, protocol, device, stage,
+                 eligibility_reference=None):
     adjustment_enabled = stage == "stage2"
     for parameter in model.adjustment.parameters():
         parameter.requires_grad_(adjustment_enabled)
@@ -96,8 +97,9 @@ def _train_phase(model, train_set, val_set, protocol, device, stage):
             nn.utils.clip_grad_norm_(parameters, protocol.gradient_clip)
             optimizer.step()
         metrics = evaluate(model, val_set, protocol, stage, device)
-        # Joint strict improvement, never the sum of the two metrics.
-        if best_metrics is None or strictly_better(metrics, best_metrics):
+        eligible = (eligibility_reference is None
+                    or strictly_better(metrics, eligibility_reference))
+        if eligible and (best_metrics is None or strictly_better(metrics, best_metrics)):
             best_metrics = metrics
             best_state = copy.deepcopy(model.state_dict())
             stale = 0
@@ -106,6 +108,8 @@ def _train_phase(model, train_set, val_set, protocol, device, stage):
             if stale >= patience:
                 break
     if best_state is None:
+        if eligibility_reference is not None:
+            return None, None
         raise RuntimeError("no finite validation candidate was produced")
     model.load_state_dict(best_state)
     return best_state, best_metrics
@@ -129,8 +133,9 @@ def fit(train_set, val_set, protocol, device="auto"):
     if not strictly_better(val1, anchor):
         return TrainingResult(model, "valid", anchor)
     # Stage 2 starts from the retained Stage-1 state and identity adjustment.
-    _, val2 = _train_phase(model, train_set, val_set, protocol, device, "stage2")
-    if strictly_better(val2, anchor):
+    _, val2 = _train_phase(model, train_set, val_set, protocol, device, "stage2",
+                           eligibility_reference=anchor)
+    if val2 is not None and strictly_better(val2, anchor):
         return TrainingResult(model, "stage2", val2)
     model.load_state_dict(state1)
     return TrainingResult(model, "stage1", val1)
